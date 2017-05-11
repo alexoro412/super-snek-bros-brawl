@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+
+<html>
+
+<body>
+  <style>
+    #canvas {
+      float: left;
+      clear: left;
+    }
+
+    html,
+    body {
+      background-color: #000000;
+    }
+
+    .bordered {
+      border-width: 16px;
+      border-color: black;
+      border-style: solid;
+    }
+
+    #scoreboard {
+      list-style-type: none;
+      margin: 0;
+      padding: 0;
+      width: 48px;
+      float: left;
+    }
+
+    #scoreboard>li {
+      text-align: center;
+      color: rgb(10, 10, 10);
+      font-family: 'Courier';
+      font-size: 24px;
+      mix-blend-mode: difference;
+    }
+
+    #title {
+      color: white;
+      float: left;
+      clear: both;
+      font-family: "Courier";
+      padding: 4px;
+      font-size: 16px;
+    }
+
+    #spectate {
+      color: white;
+      background-color: #000000;
+      border: 8px solid white;
+      float: left;
+      clear: both;
+      font-family: "Courier";
+      padding: 8px;
+      width: 96px;
+      text-align: center;
+      font-size: 16px;
+      display: none;
+      text-decoration: none;
+    }
+
+    .side {
+      float: right;
+      max-width: 512px;
+      padding-left: 10px;
+      padding-right: 10px;
+      color: white;
+      font-size: 16px;
+      font-family: "Courier";
+      text-align: center;
+    }
+  </style>
+  <span id="title">Super Snek Bros Brawl</span>
+  <canvas id="canvas" class="bordered" width="512px" height="512px"></canvas>
+  <ul id="scoreboard"></ul>
+
+  <div class="side bordered" id="controls">
+    <p>Eat the food, don't run into the other players</p>
+    <p>Arrow keys to move, P to toggle psychedlic mode</p>
+  </div>
+
+  <div class="bottom">
+    <a id="spectate" href="/spectate"> Spectate </a>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    var socket = io.connect();
+    var scoreboard = document.getElementById('scoreboard');
+
+    var canvas = document.querySelector("#canvas");
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width;
+    var h = canvas.height;
+
+    var psychedelic = false;
+
+    update_speed = 100;
+
+    class Snake {
+      constructor(initial_pos) {
+        this.cells = [];
+        this.cells[0] = initial_pos;
+        this.cells[1] = add_cells(initial_pos, [0, 1]);
+        this.cells[0].dir = 'up';
+        this.ring_offset = 0;
+        this.dir = 'up';
+        this.last_moved_dir = 'up';
+      }
+
+      check_self_collide() {
+        return hasDuplicates(this.cells);
+      }
+
+      check_other_collide(others) {
+        for (let snek_k of Object.keys(others)) {
+          let snek = sneks[snek_k];
+          if (snek == this) continue;
+          var head = this.cells[this.ring_offset];
+          if (snek.cells.some(function (element, index, array) {
+              return cell_overlaps(element, head);
+            })) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      next_offset() {
+        var new_offset = this.ring_offset + 1;
+        if (new_offset >= this.cells.length) {
+          return 0;
+        } else {
+          return new_offset;
+        }
+      }
+
+      prev_offset() {
+        var new_offset = this.ring_offset - 1;
+        if (new_offset < 0) {
+          return this.cells.length - 1;
+        } else {
+          return new_offset;
+        }
+      }
+
+      update(others) {
+        this.last_moved_dir = this.dir;
+        var change = deltas[this.dir];
+        var new_cell = add_cells(this.cells[this.ring_offset], change);
+
+        // Bounds checking
+        if (new_cell[0] > max_cell) new_cell[0] = 0;
+        if (new_cell[0] < 0) new_cell[0] = max_cell;
+
+        if (new_cell[1] > max_cell) new_cell[1] = 0;
+        if (new_cell[1] < 0) new_cell[1] = max_cell;
+
+        //  // 0: collided?
+        //  // 1: food!
+        if (isFood(new_cell)) {
+          this.cells.splice(this.ring_offset + 1, 0, food);
+          this.ring_offset = this.next_offset();
+          this.cells[this.next_offset()] = add_cells(new_cell, change);
+          socket.emit('food', {
+            eaten: true
+          });
+        } else {
+          this.cells[this.next_offset()] = new_cell;
+        }
+
+        if (this.check_self_collide() || this.check_other_collide(others)) {
+          console.log("bam!");
+          clearInterval(update_interval);
+          var tmp_id = this.id;
+          this.id = undefined;
+          playing = false;
+          socket.emit('death', {
+            id: tmp_id
+          })
+        }
+        this.ring_offset = this.next_offset();
+      }
+    }
+
+    var cell_width = 16;
+
+    keys_to_dir = {
+      'ArrowDown': 'down',
+      'ArrowUp': 'up',
+      'ArrowLeft': 'left',
+      'ArrowRight': 'right',
+      'Up': 'up',
+      'Down': 'down',
+      'Left': 'left',
+      'Right': 'right'
+    }
+
+    opposites = {
+      'up': 'down',
+      'down': 'up',
+      'left': 'right',
+      'right': 'left'
+    }
+
+    deltas = {
+      'up': [0, -1],
+      'down': [0, 1],
+      'left': [-1, 0],
+      'right': [1, 0]
+    }
+
+    document.addEventListener('keydown', function (evt) {
+      if (typeof evt.key == 'undefined' && typeof evt.keyIdentifier != 'undefined') {
+        evt.key = evt.keyIdentifier;
+      }
+
+      if (evt.key in keys_to_dir) {
+        new_dir = keys_to_dir[evt.key];
+        evt.preventDefault();
+        if (new_dir == opposites[snake.last_moved_dir]) {
+          console.log("fail!");
+        } else {
+          snake.dir = new_dir;
+        }
+      } else if (evt.key == 'p' || evt.key == 'U+0050') {
+        psychedelic = !psychedelic;
+      }
+    });
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden)
+        window.location.replace('/spectate')
+    })
+
+    function add_cells(p1, p2) {
+      return [p1[0] + p2[0], p1[1] + p2[1]]
+    }
+
+    function cell_overlaps(p1, p2) {
+      return p1[0] == p2[0] && p1[1] == p2[1];
+    }
+
+    food = [-10, -10];
+    playing = false;
+    sneks = {};
+    score_elems = [];
+
+    function update_scores() {
+      if (sneks.length == 0 || typeof sneks == 'undefined') return;
+      snek_keys = Object.keys(sneks);
+      while (scoreboard.firstElementChild) {
+        scoreboard.removeChild(scoreboard.firstElementChild);
+      }
+      score_elems = [];
+      for (let snek_key of snek_keys) {
+        let el = document.createElement('li');
+        el.style['background-color'] = sneks[snek_key].color;
+        el.innerHTML = sneks[snek_key].cells.length;
+        score_elems.push(el);
+      }
+      score_elems.sort(function (a, b) {
+        return parseInt(b.innerHTML) - parseInt(a.innerHTML);
+      })
+      for (let i = 0; i < 5 && i < score_elems.length; i++) {
+        scoreboard.appendChild(score_elems[i]);
+      }
+    }
+
+    setInterval(update_scores, 1000);
+
+
+    socket.on('snek update', function (data) {
+      if (data.id in sneks) {
+        sneks[data.id].cells = data.cells;
+      } else {
+        sneks[data.id] = new Snake([0, 0]);
+        sneks[data.id].cells = data.cells;
+        sneks[data.id].color = data.color;
+      }
+    })
+
+    socket.on('del snek', function (data) {
+      if (data.id in sneks) {
+        console.log("deleting a snek...");
+        delete sneks[data.id];
+
+      }
+    })
+
+    socket.on('mov food', function (data) {
+      food = [data.x, data.y];
+    })
+
+    function update() {
+      snake.update(sneks);
+      socket.emit('snek update', {
+        id: snake.id,
+        cells: snake.cells,
+        color: snake.color
+      });
+    }
+
+    function hasDuplicates(array) {
+      var valuesSoFar = {};
+      for (let i = 0; i < array.length; i++) {
+        var value = array[i][0] + "," + array[i][1];
+        if (value in valuesSoFar) {
+          return true;
+        }
+        valuesSoFar[value] = true;
+      }
+      return false;
+    }
+
+    max_cell = h / cell_width - 1;
+    min_cell = 0;
+
+    function randomCellIndex() {
+      return Math.floor(Math.random() * (max_cell - min_cell)) + min_cell;
+    }
+
+    function isFood(element, index, array) {
+      return cell_overlaps(element, food);
+    }
+
+    back_color = "#000000";
+    other_color = "#f412f3";
+
+    function paint() {
+      ctx.fillStyle = back_color;
+      ctx.fillRect(0, 0, w, h);
+      for (let snek of Object.keys(sneks)) {
+        ctx.fillStyle = sneks[snek].color;
+        for (let cell of sneks[snek].cells) {
+          paint_cell(cell[0], cell[1]);
+        }
+      }
+      ctx.fillStyle = snake.color;
+      paint_cell(food[0], food[1]);
+
+      if (!playing) {
+        ctx.fillStyle = "#ffffff"
+        ctx.font = '16px courier';
+        ctx.fillText('Respawn in 1 second', 16, 48);
+      }
+    }
+
+    function paint_cell(x, y) {
+      if (psychedelic) {
+        ctx.fillRect(x * 8 + 1, y * 8 + 1, 6, 6);
+        ctx.fillRect(x * 8 + 257, y * 8 + 1, 6, 6);
+        ctx.fillRect(x * 8 + 257, y * 8 + 257, 6, 6);
+        ctx.fillRect(x * 8 + 1, y * 8 + 257, 6, 6);
+      } else {
+        ctx.fillRect(x * cell_width + 2, y * cell_width + 2, cell_width - 2, cell_width - 2);
+      }
+    }
+
+    socket.on('accept', function (data) {
+      setTimeout(function () {
+        if (typeof update_interval != "undefined") clearInterval(update_interval);
+        console.log("reaccepted");
+        update_interval = setInterval(update, update_speed);
+        updating = true;
+        snake = new Snake([randomCellIndex(), randomCellIndex()]);
+        canvas.style['border-color'] = data.color;
+        let spectate_e = document.getElementById('spectate')
+        spectate_e.style['border-color'] = data.color;
+        spectate_e.style['display'] = 'block';
+        document.getElementById('controls').style['border-color'] = data.color;
+        snake.id = data.id;
+        snake.color = data.color;
+        sneks = {};
+        sneks[snake.id] = snake;
+        socket.emit('snek update', {
+          cells: snake.cells,
+          id: snake.id,
+          color: snake.color
+        });
+        socket.emit('food', {
+          eaten: false
+        });
+        playing = true;
+        init_paint();
+      }, 1000)
+    });
+
+    function init_paint() {
+      if (typeof paint_loop != "undefined") clearInterval(paint_loop);
+      paint_loop = setInterval(paint, 40);
+    }
+  </script>
+</body>
+
+</html>
