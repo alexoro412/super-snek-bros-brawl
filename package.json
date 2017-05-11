@@ -1,0 +1,12 @@
+{
+  "name": "2d",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.15.2",
+    "local-ip": "^1.0.1",
+    "randomcolor": "^0.5.2",
+    "socket.io": "^1.7.3"
+  }
+}

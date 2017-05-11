@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+
+<html>
+
+ <body>
+
+  <canvas id="canvas" width="600px" height="600px"></canvas>
+
+  <script>
+   // TODO:
+   // display score
+   // gradually increase update speed as food is eaten
+   // as food is eaten, darken background and lighten snake
+
+
+   var canvas = document.querySelector("#canvas");
+   var ctx = canvas.getContext('2d');
+   var w = canvas.width;
+   var h = canvas.height;
+
+   update_speed = 120;
+
+   class Snake
+   {
+    constructor(initial_pos)
+    {
+     this.cells = [];
+     this.cells[0] = initial_pos;
+     this.cells[0].dir = 'up';
+     this.ring_offset = 0;
+     this.dir = 'up';
+    }
+
+    check_self_collide()
+    {
+
+    }
+
+    check_other_collide()
+    {
+
+    }
+
+    next_offset()
+    {
+     var new_offset = this.ring_offset + 1;
+     if (new_offset >= this.cells.length)
+     {
+      return 0;
+     }
+     else
+     {
+      return new_offset;
+     }
+    }
+
+    prev_offset()
+    {
+     var new_offset = this.ring_offset - 1;
+     if (new_offset < 0)
+     {
+      return this.cells.length - 1;
+     }
+     else
+     {
+      return new_offset;
+     }
+    }
+
+    update()
+    {
+     var change = deltas[dir];
+     var new_cell = add_cells(this.cells[this.ring_offset], change);
+
+     // Bounds checking
+     if (new_cell[0] > max_cell) new_cell[0] = 0;
+     if (new_cell[0] < 0) new_cell[0] = max_cell;
+
+     if (new_cell[1] > max_cell) new_cell[1] = 0;
+     if (new_cell[1] < 0) new_cell[1] = max_cell;
+
+     var res = check_food(new_cell);
+     // 0: collided?
+     // 1: food!
+     if (res[0])
+     {
+      this.cells.splice(ring_offset + 1, 0, res[1]);
+      this.ring_offset = this.next_offset();
+      snake.tail = add_cells(new_cell, change);
+      reset_food(res[1]);
+     }
+     else
+     {
+      snake.tail = new_cell;
+     }
+
+     if (this.check_self_collide())
+     {
+      console.log("death");
+      // EMIT death!
+      // Pause game?
+     }
+
+     this.ring_offset = this.next_offset();
+    }
+   }
+
+   var cell_width = 10;
+
+   dir = "down";
+
+   c = 0;
+
+   keys_to_dir = {
+    'ArrowDown': 'down',
+    'ArrowUp': 'up',
+    'ArrowLeft': 'left',
+    'ArrowRight': 'right'
+   }
+
+   opposites = {
+    'up': 'down',
+    'down': 'up',
+    'left': 'right',
+    'right': 'left'
+   }
+
+   deltas = {
+    'up': [0, -1],
+    'down': [0, 1],
+    'left': [-1, 0],
+    'right': [1, 0]
+   }
+
+   document.addEventListener('keydown', function(evt)
+   {
+    if (evt.key in keys_to_dir)
+    {
+     new_dir = keys_to_dir[evt.key];
+     if (new_dir == opposites[last_moved_dir])
+     {
+      console.log("fail!");
+     }
+     else
+     {
+      dir = new_dir;
+     }
+    }
+    else if (evt.key == 'r' && (lost || won))
+    {
+     snake = [
+      [0, 0],
+      [1, 0],
+      [2, 0]
+     ];
+     lost = false;
+     won = false;
+     update_speed = 120;
+     update_interval = setInterval(update, update_speed)
+     updating = true;
+     snake_offset = 0;
+     dir = "right";
+     c = 0;
+     food = [randomCellIndex(), randomCellIndex()];
+     //  update_color();
+    }
+    else if (evt.key == 'p')
+    {
+     if (updating)
+     {
+      clearInterval(update_interval);
+     }
+     else
+     {
+      update_interval = setInterval(update, update_speed)
+     }
+     updating = !updating;
+    }
+   });
+
+   update_interval = setInterval(update, update_speed);
+   updating = true;
+
+   function init()
+   {
+    if (typeof game_loop != "undefined") clearInterval(game_loop);
+    game_loop = setInterval(paint, 60);
+   }
+   init();
+
+   snake_offset = 2;
+
+   function next_o(x)
+   {
+    if (x >= snake.length - 1)
+    {
+     return 0;
+    }
+    else
+    {
+     return x + 1;
+    }
+   }
+
+   function back_o(x)
+   {
+    if (x <= 0)
+    {
+     return snake.length - 1;
+    }
+    else
+    {
+     return x - 1;
+    }
+   }
+
+   snake = [
+    [0, 0],
+    [0, 1],
+    [1, 1]
+   ];
+
+   function add_cells(p1, p2)
+   {
+    return [p1[0] + p2[0], p1[1] + p2[1]]
+   }
+
+   function cell_overlaps(p1, p2)
+   {
+    return p1[0] == p2[0] && p1[1] == p2[1];
+   }
+
+   food = [5, 5];
+   lost = false;
+   won = false;
+
+   function update()
+   {
+
+    last_moved_dir = dir;
+    var change = deltas[dir];
+    var new_cell = add_cells(snake[snake_offset], change);
+
+    if (new_cell[0] > max_cell) new_cell[0] = 0;
+    if (new_cell[0] < 0) new_cell[0] = max_cell;
+
+    if (new_cell[1] > max_cell) new_cell[1] = 0;
+    if (new_cell[1] < 0) new_cell[1] = max_cell;
+
+    if (isFood(new_cell))
+    {
+     snake.splice(snake_offset + 1, 0, food);
+     snake_offset = next_o(snake_offset);
+     snake[next_o(snake_offset)] = add_cells(new_cell, change);
+     food = [randomCellIndex(), randomCellIndex()];
+     //  update_color();
+    }
+    else
+    {
+     snake[next_o(snake_offset)] = new_cell;
+    }
+
+    if (hasDuplicates(snake))
+    {
+     console.log("death");
+     clearInterval(update_interval);
+     lost = true;
+    }
+    snake_offset = next_o(snake_offset);
+   }
+
+   function hasDuplicates(array)
+   {
+    var valuesSoFar = {};
+    for (let i = 0; i < array.length; i++)
+    {
+     var value = array[i][0] + "," + array[i][1];
+     if (value in valuesSoFar)
+     {
+      return true;
+     }
+     valuesSoFar[value] = true;
+    }
+    return false;
+   }
+
+   max_cell = h / cell_width - 1;
+   min_cell = 0;
+
+   function randomCellIndex()
+   {
+    return Math.floor(Math.random() * (max_cell - min_cell)) + min_cell;
+   }
+
+   function isFood(element, index, array)
+   {
+    return cell_overlaps(element, food);
+   }
+
+   cell_color = "#000000";
+   back_color = "#ffffff";
+
+   function update_color()
+   {
+    c += 2;
+    update_speed -= 0.5;
+    clearInterval(update_interval);
+    update_interval = setInterval(update, update_speed);
+    if (c < 255)
+    {
+     cell_c = c.toString(16);
+     back_c = (255 - c).toString(16);
+     if (cell_c.length == 1) cell_c = "0" + cell_c;
+     if (back_c.length == 1) back_c = "0" + back_c;
+     cell_color = "#" + cell_c + cell_c + cell_c;
+     back_color = "#" + back_c + back_c + back_c;
+    }
+    else
+    {
+     won = true;
+     clearInterval(update_interval);
+    }
+   }
+
+   function paint()
+   {
+    //We start by repainting the background
+    ctx.fillStyle = back_color;
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = "black";
+    ctx.strokeRect(0, 0, w, h);
+    for (let cell in snake)
+    {
+     paint_cell(snake[cell][0], snake[cell][1], cell_color);
+    }
+    // for (let cell in other){
+    //   paint_cell(snake[cell][0], snake[cell][1], cell_color);
+    // }
+    paint_cell(food[0], food[1], cell_color);
+
+    ctx.font = '48px serif'
+    ctx.textAlign = "left";
+    ctx.fillText(snake.length, 600 - 48 * 2, 48);
+
+    if (lost)
+    {
+     ctx.fillText("You lost...", 200, 200);
+     ctx.fillText("Press R to restart", 200, 250);
+    }
+    else if (won)
+    {
+     ctx.fillText("You won!", 200, 200);
+     ctx.fillText("Press R to restart", 200, 250);
+    }
+   }
+
+   function paint_cell(x, y, c)
+   {
+    ctx.fillStyle = c;
+    ctx.fillRect(x * cell_width, y * cell_width, cell_width, cell_width);
+   }
+
+   //  update_color();
+
+  </script>
+ </body>
+
+</html>

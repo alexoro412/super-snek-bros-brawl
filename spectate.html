@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+
+<html>
+
+ <body>
+  <style>
+   #canvas {
+    float: left;
+    clear: left;
+   }
+
+   html,
+   body {
+    background-color: #000000;
+   }
+
+   .bordered {
+    border-width: 16px;
+    border-color: black;
+    border-style: solid;
+   }
+
+   #scoreboard {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    width: 48px;
+    float: left;
+   }
+
+   #scoreboard>li {
+    text-align: center;
+    color: rgb(10, 10, 10);
+    font-family: 'Courier';
+    font-size: 24px;
+    mix-blend-mode: difference;
+   }
+
+   #title {
+    color: white;
+    float: left;
+    clear: both;
+    font-family: "Courier";
+    padding: 4px;
+    font-size: 16px;
+   }
+
+   #play {
+    color: white;
+    background-color: #000000;
+    border: 8px solid white;
+    float: left;
+    clear: both;
+    font-family: "Courier";
+    padding: 8px;
+    width: 64px;
+    text-align: center;
+    font-size: 16px;
+    text-decoration: none;
+   }
+
+  </style>
+  <span id="title">Super Snek Bros Brawl</span>
+  <canvas id="canvas" class="bordered" width="512px" height="512px"></canvas>
+  <ul id="scoreboard"></ul>
+  <div class="bottom">
+   <a id="play" href="/play"> Play! </a>
+
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+   // TODO:
+   // display score
+   // gradually increase update speed as food is eaten
+   // as food is eaten, darken background and lighten snake
+   var socket = io.connect('http://10.80.6.13:3000');
+   var scoreboard = document.getElementById('scoreboard');
+
+   var canvas = document.querySelector("#canvas");
+   var ctx = canvas.getContext('2d');
+   var w = canvas.width;
+   var h = canvas.height;
+
+   var psychedelic = false;
+
+   update_speed = 100;
+
+   class Snake
+   {
+    constructor(initial_pos)
+    {
+     this.cells = [];
+     this.cells[0] = initial_pos;
+     this.cells[1] = add_cells(initial_pos, [0, 1]);
+     this.cells[0].dir = 'up';
+     this.ring_offset = 0;
+     this.dir = 'up';
+     this.last_moved_dir = 'up';
+    }
+
+
+   }
+
+   var cell_width = 16;
+
+   document.addEventListener('keydown', function(evt)
+   {
+    if (typeof evt.key == 'undefined' && typeof evt.keyIdentifier != 'undefined')
+    {
+     evt.key = evt.keyIdentifier;
+    }
+
+    if (evt.key == 'p' || evt.key == 'U+0050')
+    {
+     psychedelic = !psychedelic;
+    }
+   })
+
+   deltas = {
+    'up': [0, -1],
+    'down': [0, 1],
+    'left': [-1, 0],
+    'right': [1, 0]
+   }
+
+
+
+   //  snake = new Snake([30, 30]);
+   //  other = new Snake([20, 20]);
+   //  sam = new Snake([10, 15]);
+
+   function add_cells(p1, p2)
+   {
+    return [p1[0] + p2[0], p1[1] + p2[1]]
+   }
+
+   function cell_overlaps(p1, p2)
+   {
+    return p1[0] == p2[0] && p1[1] == p2[1];
+   }
+
+   food = [-10, -10];
+   playing = false;
+   sneks = {};
+   score_elems = [];
+
+   function update_scores()
+   {
+    if (sneks.length == 0 || typeof sneks == 'undefined') return;
+    snek_keys = Object.keys(sneks);
+    while (scoreboard.firstElementChild)
+    {
+     scoreboard.removeChild(scoreboard.firstElementChild);
+    }
+    score_elems = [];
+    for (let snek_key of snek_keys)
+    {
+     let el = document.createElement('li');
+     el.style['background-color'] = sneks[snek_key].color;
+     el.innerHTML = sneks[snek_key].cells.length;
+     score_elems.push(el);
+    }
+    score_elems.sort(function(a, b)
+    {
+     return parseInt(a.innerHTML) < parseInt(b.innerHTML);
+    })
+    for (let i = 0; i < 5 && i < score_elems.length; i++)
+    {
+     scoreboard.appendChild(score_elems[i]);
+    }
+   }
+
+   setInterval(update_scores, 1000);
+
+   socket.on('snek update', function(data)
+   {
+    if (data.id in sneks)
+    {
+     sneks[data.id].cells = data.cells;
+    }
+    else
+    {
+     sneks[data.id] = new Snake([0, 0]);
+     sneks[data.id].cells = data.cells;
+     sneks[data.id].color = data.color;
+    }
+   })
+
+   socket.on('del snek', function(data)
+   {
+    if (data.id in sneks)
+    {
+     console.log("deleting a snek...");
+     delete sneks[data.id];
+    }
+   })
+
+   socket.on('mov food', function(data)
+   {
+    food = [data.x, data.y];
+   })
+
+   back_color = "#000000";
+
+   function paint()
+   {
+
+    ctx.fillStyle = back_color;
+    ctx.fillRect(0, 0, w, h);
+
+    for (let snek of Object.keys(sneks))
+    {
+     ctx.fillStyle = sneks[snek].color;
+     for (let cell of sneks[snek].cells)
+     {
+      paint_cell(cell[0], cell[1]);
+     }
+    }
+    ctx.fillStyle = color;
+    paint_cell(food[0], food[1]);
+   }
+
+   function paint_cell(x, y)
+   {
+    if (psychedelic)
+    {
+     ctx.fillRect(x * 8 + 1, y * 8 + 1, 6, 6);
+     ctx.fillRect(x * 8 + 257, y * 8 + 1, 6, 6);
+     ctx.fillRect(x * 8 + 257, y * 8 + 257, 6, 6);
+     ctx.fillRect(x * 8 + 1, y * 8 + 257, 6, 6);
+    }
+    else
+    {
+     ctx.fillRect(x * cell_width + 2, y * cell_width + 2, cell_width - 2, cell_width - 2);
+    }
+   }
+   color = "#ffffff";
+
+   socket.on('accept', function(data)
+   {
+    setTimeout(function()
+    {
+     if (typeof update_interval != "undefined") clearInterval(update_interval);
+     console.log("reaccepted");
+     color = data.color;
+     canvas.style['border-color'] = color;
+     document.getElementById('play').style['border-color'] = color;
+     socket.emit('food',
+     {
+      eaten: false
+     });
+     playing = true;
+     init_paint();
+     // socket.emit('my other event', { my: 'data' });
+    }, 100)
+   });
+
+   function init_paint()
+   {
+    if (typeof paint_loop != "undefined") clearInterval(paint_loop);
+    paint_loop = setInterval(paint, 40);
+   }
+   init_paint();
+
+   //  update_color();
+
+  </script>
+ </body>
+
+</html>
