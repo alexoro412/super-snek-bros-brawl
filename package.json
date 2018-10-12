@@ -7,7 +7,10 @@
     "express": "^4.15.2",
     "local-ip": "^1.0.1",
     "randomcolor": "^0.5.2",
+<<<<<<< HEAD
     "shortid": "^2.2.13",
+=======
+>>>>>>> 5428d6b83104043f99a94f7ede9973fb29e28a1c
     "socket.io": "^1.7.3"
   }
 }
